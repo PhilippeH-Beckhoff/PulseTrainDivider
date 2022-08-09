@@ -6,7 +6,7 @@ VAR
 	iDivRatio					:UINT:=4;
 	iDivRatio2					:UINT:=5;
 	iEvalMode					:USINT:=4;
-	myFbEL5131					:FB_EL5131;
+
 	
 	bSingleShot					:bool:=false;
 	bReinitDivider				:BOOL;
@@ -18,32 +18,7 @@ VAR
 END_VAR
 ]]></Declaration>
     <Implementation>
-      <ST><![CDATA[IF bReinitDivider THEN
-	myFbEL5131.M_Reinit_Divider();
-	bReinitDivider:=false;
-END_IF
-
-
-IF NOT myFbEL5131.bConfigured AND not bDualMode THEN
-	myFbEL5131.bSingleShotPulses:=bSingleShot;
-	myFbEL5131();
-	myFbEL5131.P_DividerRatio:=iDivRatio;
-	myFbEL5131.P_EvalMode:=iEvalMode;
-	myFbEL5131.M_Config_Divider_Single();
-END_IF;
-
-IF NOT myFbEL5131.bConfigured AND bDualMode THEN
-	myFbEL5131.bSingleShotPulses:=bSingleShot;
-	myFbEL5131();
-	myFbEL5131.P_DividerRatio:=iDivRatio;
-	myFbEL5131.P_DividerRatio2:=iDivRatio2;
-	myFbEL5131.P_EvalMode:=iEvalMode;
-	myFbEL5131.M_Config_Divider_Dual();
-END_IF;
-
-IF myFbEL5131.bConfigured AND bDualMode AND bFeed THEN
-	myFbEL5131.M_FifoFeed_EL5131();
-END_IF]]></ST>
+      <ST><![CDATA[]]></ST>
     </Implementation>
   </POU>
 </TcPlcObject>
