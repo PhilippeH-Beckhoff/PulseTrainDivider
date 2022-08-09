@@ -435,7 +435,7 @@
 				</Entry>
 			</Pdo>
 			<Pdo Name="ENC Control Output Channel 1" Index="#x1602" InOut="1" Flags="#x0010" SyncMan="2">
-				<Entry Name="Control Output__Control__Set digital output" Index="#x7001" Sub="#x01">
+				<Entry Name="Control Output__Control__Set digital output" Index="#x7001" Sub="#x01" Flags="#x00008020">
 					<Type>BIT</Type>
 				</Entry>
 				<Entry Name="Control Output__Control__Enable thresholds output" Index="#x7001" Sub="#x02" Flags="#x00008020">
@@ -507,7 +507,7 @@
 				<Entry Name="Control Output__Threshold__Threshold 7" Index="#x7004" Sub="#x17">
 					<Type>UDINT</Type>
 				</Entry>
-				<Entry Name="Control Output__Threshold__Threshold 8" Index="#x7004" Sub="#x18">
+				<Entry Name="Control Output__Threshold__Threshold 8" Index="#x7004" Sub="#x18" Flags="#x00008020">
 					<Type>UDINT</Type>
 				</Entry>
 				<Entry Name="Control Output__Duration__Duration 1" Index="#x7005" Sub="#x11">
@@ -611,7 +611,7 @@
 				<Entry Name="Control Output__Threshold__Threshold 8" Index="#x7014" Sub="#x18">
 					<Type>UDINT</Type>
 				</Entry>
-				<Entry Name="Control Output__Duration__Duration 1" Index="#x7015" Sub="#x11">
+				<Entry Name="Control Output__Duration__Duration 1" Index="#x7015" Sub="#x11" Flags="#x00008020">
 					<Type>UDINT</Type>
 				</Entry>
 				<Entry Name="Control Output__Duration__Duration 2" Index="#x7015" Sub="#x12">

@@ -3,90 +3,106 @@
   <POU Name="FB_PulseDiv" Id="{62b748ae-48aa-48ff-a08f-c4a52114525d}" SpecialFunc="None">
     <Declaration><![CDATA[FUNCTION_BLOCK FB_PulseDiv
 VAR_INPUT
+	//
+	bDualMode							:BOOL;
+	
 	///bSingleShotPulses=TRUE=> output pulses are as wide as 1/2 of the input pulses period
-	bSingleShotPulses: BOOL;
+	bSingleShotPulses					: BOOL;
+	
 	///bSingleShotPulses=FALS=> output pulses are generated with a 50% duty cyle
-	iDividerRatio1stOutput: UINT;
-	iDividerRatio2ndOutput: UINT;
-	iEvalMode: USINT;
+	iDividerRatio1stOutput				: UINT;
+	iDividerRatio2ndOutput				: UINT;
+	iEvalMode							: USINT;
 END_VAR
 VAR_OUTPUT
 	///this output is set to TRUE when the terminal has been configured
-	bConfigured: BOOL;
+	bDividerReady						: BOOL;
+	iAppliedDividerRatio1stOut			: UINT;
+	iAppliedDividerRatio2ndOut			: UINT;
 END_VAR
 VAR
-	iEL5131CounterVal AT %I*: UDINT;
-	iStatusDO1 AT %I*: BOOL;
-	iStatusDO2 AT %I*: BOOL;
+	//keep track of changes at the FB inputs, in order to reconfigure it when needed
+	iDividerRatioOld					:UINT;
+	iDividerRatio2Old					:UINT;
+	bDualModeOld						:BOOL;
+	bSingleShotPulsesOld				:BOOL;
+	bFirstConfig						:BOOL:=FALSE;
+	//keep track of changes at the FB inputs, in order to reconfigure it when needed
+		
+
+
+	iEL5131CounterVal AT %I*			: UDINT;
+	iStatusDO1 AT %I*					: BOOL;
+	iStatusDO2 AT %I*					: BOOL;
 	///this variable controls the evolution of the configuration sequence
-	stepCfgEL5131Single: USINT := 0;
+	stepCfgEL5131Single					: USINT := 0;
 	///info about error occurring while executing the config sequence of the EL5131
-	bError: BOOL;
+	bError								: BOOL;
 	///info about error occurring while executing the config sequence of the EL5131
-	iErrStep: USINT;
+	iErrStep							: USINT;
 	///identifying the correct EL5131 terminal
-	amsNetIdEL5131 AT %I*: AMSNETID;
-	sAmsNetIdEL5131: STRING;
+	amsNetIdEL5131 AT %I*				: AMSNETID;
+	sAmsNetIdEL5131						: STRING;
 	///identifying the correct EL5131 terminal
-	wPortEL5131 AT %I*: WORD;
+	wPortEL5131 AT %I*					: WORD;
 	///number of outputs events (always 2)	
-	iNbOfOutputEvents AT %Q*: USINT;
+	iNbOfOutputEvents AT %Q*			: USINT;
 	///for temporarily disabling the writing of the output based on counter thresholds, while reconfiguring the terminal 
-	bEnbThreshOutputs AT %Q*: BOOL;
+	bEnbThreshOutputs AT %Q*			: BOOL;
 	///for temporarily disabling the writing of the output based on counter thresholds, while reconfiguring the terminal 
-	bEnbThreshOutputs2 AT %Q*: BOOL;
+	bEnbThreshOutputs2 AT %Q*			: BOOL;
 	///for temporarily  forcing the output to FALSE, while reconfiguring the terminal
-	bSetDigitalOut AT %Q*: BOOL;
+	bSetDigitalOut AT %Q*				: BOOL;
 	///for temporarily  forcing the output to FALSE, while reconfiguring the terminal
-	bSetDigitalOut2 AT %Q*: BOOL;
+	bSetDigitalOut2 AT %Q*				: BOOL;
 	///value for the output_1 thresholds, 
-	iThresholds_1 AT %Q*: ARRAY[1..8] OF UDINT;
+	iThresholds_1 AT %Q*				: ARRAY[1..8] OF UDINT;
 	///output_1 events
-	iOutStates_1 AT %Q*: ARRAY[1..8] OF BOOL;
+	iOutStates_1 AT %Q*					: ARRAY[1..8] OF BOOL;
 	///value for the output_2 thresholds, 
-	iThresholds_2 AT %Q*: ARRAY[1..8] OF UDINT;
+	iThresholds_2 AT %Q*				: ARRAY[1..8] OF UDINT;
 	///output_2 events
-	iOutStates_2 AT %Q*: ARRAY[1..8] OF BOOL;
+	iOutStates_2 AT %Q*					: ARRAY[1..8] OF BOOL;
 	///force reset the counter value to 0 when the EL5131 is reconfigured
-	bForceResetCounter AT %Q*: BOOL;
+	bForceResetCounter AT %Q*			: BOOL;
 	///force reset the counter value to 0 when the EL5131 is reconfigured
-	iForceResetCntVal AT %Q*: UDINT;
-	arrFIFO_Thr_1: ARRAY[1..20] OF UDINT;
-	arrFIFO_Evt_1: ARRAY[1..20] OF BOOL;
-	arrFIFO_Thr_2: ARRAY[1..20] OF UDINT;
-	arrFIFO_Evt_2: ARRAY[1..20] OF BOOL;
+	iForceResetCntVal AT %Q*			: UDINT;
+	arrFIFO_Thr_1						: ARRAY[1..20] OF UDINT;
+	arrFIFO_Evt_1						: ARRAY[1..20] OF BOOL;
+	arrFIFO_Thr_2						: ARRAY[1..20] OF UDINT;
+	arrFIFO_Evt_2						: ARRAY[1..20] OF BOOL;
 	///in order to be able to overwrite the limit counter value and reset counter value via CoE in the EL5131, the value 16#72657375 needs to be written in the object 16#F008 
-	iProtectionReg: UDINT := 16#72657375;
+	iProtectionReg						: UDINT := 16#72657375;
 	///defining the max limit counter value at which the counter is automatically reset to the reset counter value
-	iLimitCounterVal: UDINT := 31;
+	iLimitCounterVal					: UDINT := 31;
 	///start value of the counter once it has been reset	
-	iResetCounterVal: UDINT := 0;
-	writeCoEConfig: FB_EcCoESdoWrite;
+	iResetCounterVal					: UDINT := 0;
+	writeCoEConfig						: FB_EcCoESdoWrite;
 	///Evaluation mode (1-fold, 2-fold, 4-fold) is chosen via a Property of the FB; Divider ratio (4,5,7) is chosen via a Property of the FB
-	iSelectedEvalMode: USINT;
-	iCoeEnumEvalMode: USINT;
-	iDividerRatio: UINT;
+	iSelectedEvalMode					: USINT;
+	iCoeEnumEvalMode					: USINT;
+	iDividerRatio						: UINT;
 	///Dual mode
-	stepCfgEL5131Dual: USINT := 0;
+	stepCfgEL5131Dual					: USINT := 0;
 	///only in dual output mode
-	iDividerRatio2: UINT;
-	iNbOfOutputEvents2 AT %Q*: USINT;
-	iCntLimDivider: UDINT;
-	iCntLimDivider2: UDINT;
-	iCntLimDividerMin: UDINT;
-	iDualCntLimit: UDINT;
-	iHalfOutPeriodNrOfEvts: UDINT;
-	iHalfOutPeriodNrOfEvts2: UDINT;
-	iNumberOfEventsCycle: UDINT;
-	iNumberOfEventsCycle2: UDINT;
-	idx: UDINT;
-	iArr: UINT;
-	i: UINT;
-	j: UINT;
-	iGcd: UDINT;
+	iDividerRatio2						: UINT;
+	iNbOfOutputEvents2 AT %Q*			: USINT;
+	iCntLimDivider						: UDINT;
+	iCntLimDivider2						: UDINT;
+	iCntLimDividerMin					: UDINT;
+	iDualCntLimit						: UDINT;
+	iHalfOutPeriodNrOfEvts				: UDINT;
+	iHalfOutPeriodNrOfEvts2				: UDINT;
+	iNumberOfEventsCycle				: UDINT;
+	iNumberOfEventsCycle2				: UDINT;
+	idx									: UDINT;
+	iArr								: UINT;
+	i									: UINT;
+	j									: UINT;
+	iGcd								: UDINT;
 	///Fifo feed when Dual outputs are used
-	idxFeed: UDINT;
-	idxFIFO: UDINT;
+	idxFeed								: UDINT;
+	idxFIFO								: UDINT;
 END_VAR
 ]]></Declaration>
     <Implementation>
@@ -108,7 +124,7 @@ writeCoEConfig(
 iDividerRatio:=LIMIT(2,iDividerRatio1stOutput,20);	
 iDividerRatio2:=LIMIT(2,iDividerRatio2ndOutput,20);	
 	
-
+//Using the eval mode at the input to select the x-fold evaluation; preparing the CoE object for writing the correct eval mode
 IF ((iEvalMode<>1) AND (iEvalMode<>2) AND (iEvalMode<>4)) THEN
 	iSelectedEvalMode:=4;  //iEvaluationMode=4 =>Quadrature decoding
 ELSE
@@ -121,14 +137,42 @@ CASE iSelectedEvalMode OF
 	4: iCoeEnumEvalMode:=0; (*4-fold*)		
 END_CASE
 
+//changing the bDividerNeedsReconfig status
+	IF (iDividerRatio<>iDividerRatioOld) OR(iDividerRatio2<>iDividerRatio2Old) OR (bDualMode<>bDualModeOld) OR (bSingleShotPulses<>bSingleShotPulsesOld) OR bFirstConfig THEN
+		bDividerReady:=TRUE;
+		bDividerReady:=FALSE;
+		bFirstConfig:=FALSE;
+	END_IF;
+
+	iDividerRatioOld:=iDividerRatio;
+	iDividerRatio2Old:=iDividerRatio2;
+	bDualModeOld:=bDualMode;
+	bSingleShotPulsesOld:=bSingleShotPulses;
+
+
+//triggering the start of the configuring sequence for a single pulse divider (one output)
+IF (stepCfgEL5131Single=0) AND (NOT bDividerReady) AND NOT bDualMode THEN
 	
-//triggering the start of the sequence, when the Method is explicitly called
-IF stepCfgEL5131Single=0 THEN
-	bConfigured:=FALSE;
+	iAppliedDividerRatio1stOut:=iDividerRatio;
+	iAppliedDividerRatio2ndOut:=0;
+
 	iErrStep:=0;
 	bError:=FALSE;
 	stepCfgEL5131Single:=1;
 END_IF
+
+//triggering the start of the configuring sequence for a dual pulse divider (two outputs)
+IF (stepCfgEL5131Dual=0) AND (NOT bDividerReady) AND bDualMode THEN
+	
+	iAppliedDividerRatio1stOut:=iDividerRatio;
+	iAppliedDividerRatio2ndOut:=iDividerRatio2;
+
+	iErrStep:=0;
+	bError:=FALSE;
+	stepCfgEL5131Dual:=1;
+END_IF
+
+
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////SEQUENCE FOR INITIALIZING A SINGLE PULSE TRAIN DIVIDER OUTPUT/////////////////////////////////////////////////
@@ -300,7 +344,7 @@ CASE stepCfgEL5131Single OF
 		
 	//wait for the end of writing 	
 	110: IF NOT writeCoEConfig.bBusy AND NOT writeCoEConfig.bError THEN
-			bConfigured:=TRUE;	//setting the 'bConfigured' bit so it is confirmed that the sequence has been completely executed
+			bDividerReady:=TRUE;	//setting the 'bConfigured' bit so it is confirmed that the sequence has been completely executed
 			stepCfgEL5131Single:=0;			
 		END_IF
 		
@@ -321,15 +365,6 @@ END_CASE
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////SEQUENCE FOR INITIALIZING A DUAL PULSE TRAIN DIVIDER OUTPUT/////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-//triggering the start of the sequence, when the Method is explicitly called
-IF stepCfgEL5131Dual=0 THEN
-	bConfigured:=FALSE;
-	iErrStep:=0;
-	bError:=FALSE;
-	stepCfgEL5131Dual:=1;
-END_IF
-
-
 //step sequence for the different configuration steps of the EL5131
 CASE stepCfgEL5131Dual OF
 	
@@ -533,7 +568,7 @@ CASE stepCfgEL5131Dual OF
 		
 	//wait for the end of writing 	
 	110: IF NOT writeCoEConfig.bBusy AND NOT writeCoEConfig.bError THEN
-			bConfigured:=TRUE;	//setting the 'bConfigured' bit so it is confirmed that the sequence has been completely executed
+			bDividerReady:=TRUE;	//setting the 'bConfigured' bit so it is confirmed that the sequence has been completely executed
 			stepCfgEL5131Dual:=0;			
 		END_IF
 		
@@ -553,71 +588,76 @@ END_CASE
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////FIFO FEED WHEN DUAL OUTPUTS ARE USED//////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-//FIRST PULSE TRAIN/////////////////////////////////////////////////////////////////////////
-//checking if we have more than 8 events/cycle; if not=>fixed counters; if yes=>FIFO feed 
-IF iNumberOfEventsCycle<=8 THEN
-	FOR idxFeed:=1 TO iNumberOfEventsCycle DO
-		iThresholds_1[idxFeed]:=arrFIFO_Thr_1[idxFeed];
-		iOutStates_1[idxFeed]:=arrFIFO_Evt_1[idxFeed];
-	END_FOR
-ELSE	
-	//search the next FIFO value the closest to the actual counter value
-	idxFifo:=1;
-	FOR idxFeed:=1 TO iNumberOfEventsCycle DO
-		IF iThresholds_1[idxFeed]>=iEL5131CounterVal THEN
-			idxFIFO:=idxFeed;
-			EXIT;
-		END_IF;
-	END_FOR;	
-	FOR idxFeed:=1 TO 8 DO
-		IF (idxFIFO+idxFeed-1)<=iNumberOfEventsCycle THEN
-			iThresholds_1[idxFeed]:=arrFIFO_Thr_1[idxFIFO+idxFeed-1];
-			iOutStates_1[idxFeed]:=arrFIFO_Evt_1[idxFIFO+idxFeed-1];	
-		ELSE
-			iThresholds_1[idxFeed]:=arrFIFO_Thr_1[idxFIFO+idxFeed-1-iNumberOfEventsCycle];
-			iOutStates_1[idxFeed]:=arrFIFO_Evt_1[idxFIFO+idxFeed-1-iNumberOfEventsCycle];				
-		END_IF;	
-	END_FOR
-
-END_IF		
-//////////////////////////////////////////////////////////////////////////////////////////////
 
 
+IF bDualMode AND bDividerReady THEN
 
 
-
-//SECOND PULSE TRAIN/////////////////////////////////////////////////////////////////////////
-//checking if we have more than 8 events/cycle; if not=>fixed counters; if yes=>FIFO feed 
-IF iNumberOfEventsCycle2<=8 THEN
-	FOR idxFeed:=1 TO iNumberOfEventsCycle2 DO
-		iThresholds_2[idxFeed]:=arrFIFO_Thr_2[idxFeed];
-		iOutStates_2[idxFeed]:=arrFIFO_Evt_2[idxFeed];
-	END_FOR
-ELSE	
-	//search the next FIFO value the closest to the actual counter value
-	idxFifo:=1;
-	FOR idxFeed:=1 TO iNumberOfEventsCycle2 DO
-		IF iThresholds_2[idxFeed]>=iEL5131CounterVal THEN
-			idxFIFO:=idxFeed;
-			EXIT;
-		END_IF;
-	END_FOR;	
-	FOR idxFeed:=1 TO 8 DO
-		IF (idxFIFO+idxFeed-1)<=iNumberOfEventsCycle2 THEN
-			iThresholds_2[idxFeed]:=arrFIFO_Thr_2[idxFIFO+idxFeed-1];
-			iOutStates_2[idxFeed]:=arrFIFO_Evt_2[idxFIFO+idxFeed-1];	
-		ELSE
-			iThresholds_2[idxFeed]:=arrFIFO_Thr_2[idxFIFO+idxFeed-1-iNumberOfEventsCycle2];
-			iOutStates_2[idxFeed]:=arrFIFO_Evt_2[idxFIFO+idxFeed-1-iNumberOfEventsCycle2];				
-		END_IF;	
-	END_FOR
-
-END_IF		
-//////////////////////////////////////////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////FIFO FEED WHEN DUAL OUTPUTS ARE USED//////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
+			//FIRST PULSE TRAIN/////////////////////////////////////////////////////////////////////////
+			//checking if we have more than 8 events/cycle; if not=>fixed counters; if yes=>FIFO feed 
+			IF iNumberOfEventsCycle<=8 THEN
+				FOR idxFeed:=1 TO iNumberOfEventsCycle DO
+					iThresholds_1[idxFeed]:=arrFIFO_Thr_1[idxFeed];
+					iOutStates_1[idxFeed]:=arrFIFO_Evt_1[idxFeed];
+				END_FOR
+			ELSE	
+				//search the next FIFO value the closest to the actual counter value
+				idxFifo:=1;
+				FOR idxFeed:=1 TO iNumberOfEventsCycle DO
+					IF iThresholds_1[idxFeed]>=iEL5131CounterVal THEN
+						idxFIFO:=idxFeed;
+						EXIT;
+					END_IF;
+				END_FOR;	
+				FOR idxFeed:=1 TO 8 DO
+					IF (idxFIFO+idxFeed-1)<=iNumberOfEventsCycle THEN
+						iThresholds_1[idxFeed]:=arrFIFO_Thr_1[idxFIFO+idxFeed-1];
+						iOutStates_1[idxFeed]:=arrFIFO_Evt_1[idxFIFO+idxFeed-1];	
+					ELSE
+						iThresholds_1[idxFeed]:=arrFIFO_Thr_1[idxFIFO+idxFeed-1-iNumberOfEventsCycle];
+						iOutStates_1[idxFeed]:=arrFIFO_Evt_1[idxFIFO+idxFeed-1-iNumberOfEventsCycle];				
+					END_IF;	
+				END_FOR
+			
+			END_IF		
+			//////////////////////////////////////////////////////////////////////////////////////////////
+			
+			
+			
+			
+			
+			//SECOND PULSE TRAIN/////////////////////////////////////////////////////////////////////////
+			//checking if we have more than 8 events/cycle; if not=>fixed counters; if yes=>FIFO feed 
+			IF iNumberOfEventsCycle2<=8 THEN
+				FOR idxFeed:=1 TO iNumberOfEventsCycle2 DO
+					iThresholds_2[idxFeed]:=arrFIFO_Thr_2[idxFeed];
+					iOutStates_2[idxFeed]:=arrFIFO_Evt_2[idxFeed];
+				END_FOR
+			ELSE	
+				//search the next FIFO value the closest to the actual counter value
+				idxFifo:=1;
+				FOR idxFeed:=1 TO iNumberOfEventsCycle2 DO
+					IF iThresholds_2[idxFeed]>=iEL5131CounterVal THEN
+						idxFIFO:=idxFeed;
+						EXIT;
+					END_IF;
+				END_FOR;	
+				FOR idxFeed:=1 TO 8 DO
+					IF (idxFIFO+idxFeed-1)<=iNumberOfEventsCycle2 THEN
+						iThresholds_2[idxFeed]:=arrFIFO_Thr_2[idxFIFO+idxFeed-1];
+						iOutStates_2[idxFeed]:=arrFIFO_Evt_2[idxFIFO+idxFeed-1];	
+					ELSE
+						iThresholds_2[idxFeed]:=arrFIFO_Thr_2[idxFIFO+idxFeed-1-iNumberOfEventsCycle2];
+						iOutStates_2[idxFeed]:=arrFIFO_Evt_2[idxFIFO+idxFeed-1-iNumberOfEventsCycle2];				
+					END_IF;	
+				END_FOR
+			
+			END_IF		
+			//////////////////////////////////////////////////////////////////////////////////////////////
+			/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+			///////////////////////////////////////////////////////////////////FIFO FEED WHEN DUAL OUTPUTS ARE USED//////////////////////////////////////////////////////////
+			/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+end_if;			
 
 
 ]]></ST>

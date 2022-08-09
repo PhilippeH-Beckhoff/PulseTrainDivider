@@ -3,23 +3,30 @@
   <POU Name="MAINEL5131" Id="{9e5dd91e-8529-40e3-bfe1-688fc2bf0786}" SpecialFunc="None">
     <Declaration><![CDATA[PROGRAM MAINEL5131
 VAR
+	myPulseDiv					:FB_PulseDiv;
+	bSingleShot					:BOOL:=FALSE;
+	bDualMode					:BOOL:=FALSE;
 	iDivRatio					:UINT:=4;
 	iDivRatio2					:UINT:=5;
 	iEvalMode					:USINT:=4;
+	
+	bDividerReady				:BOOL;
+	iActiveRatio1				:UINT;
+	iActiveRatio2				:UINT;
+	
 
-	myPulseDiv					:FB_PulseDiv;
-	
-	bSingleShot					:bool:=false;
-	bReinitDivider				:BOOL;
-	
-	bDualMode					:BOOL;
-	bFeed						:BOOL;
-	
-	trigReinitDivider			:r_trig;
 END_VAR
 ]]></Declaration>
     <Implementation>
-      <ST><![CDATA[]]></ST>
+      <ST><![CDATA[myPulseDiv(
+	bDualMode:=bDualMode , 
+	bSingleShotPulses:=bSingleShot , 
+	iDividerRatio1stOutput:=iDivRatio , 
+	iDividerRatio2ndOutput:=iDivRatio2 , 
+	iEvalMode:=iEvalMode , 
+	bDividerReady=>bDividerReady , 
+	iAppliedDividerRatio1stOut=>iActiveRatio1 , 
+	iAppliedDividerRatio2ndOut=>iActiveRatio2);]]></ST>
     </Implementation>
   </POU>
 </TcPlcObject>
