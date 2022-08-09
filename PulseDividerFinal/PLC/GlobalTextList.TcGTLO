@@ -1,0 +1,106 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.11">
+  <GlobalTextList Name="GlobalTextList" Id="{25243789-bdab-4336-beb6-b605d03d78f1}">
+    <XmlArchive>
+      <Data>
+        <o xml:space="preserve" t="GlobalTextListObject">
+          <l n="TextList" t="ArrayList" cet="TextListRow">
+            <o>
+              <v n="TextID">"504"</v>
+              <v n="TextDefault">" Counter actual value: %i"</v>
+              <l n="LanguageTexts" t="ArrayList" />
+            </o>
+            <o>
+              <v n="TextID">"559"</v>
+              <v n="TextDefault">" EL5101"</v>
+              <l n="LanguageTexts" t="ArrayList" />
+            </o>
+            <o>
+              <v n="TextID">"228"</v>
+              <v n="TextDefault">" EL5131"</v>
+              <l n="LanguageTexts" t="ArrayList" />
+            </o>
+            <o>
+              <v n="TextID">"384"</v>
+              <v n="TextDefault">" Pulse train divider ratio: %i"</v>
+              <l n="LanguageTexts" t="ArrayList" />
+            </o>
+            <o>
+              <v n="TextID">"537"</v>
+              <v n="TextDefault">" x-fold evaluation: %i"</v>
+              <l n="LanguageTexts" t="ArrayList" />
+            </o>
+            <o>
+              <v n="TextID">"107"</v>
+              <v n="TextDefault">"Counting generated pulses 
+@output EL5131"</v>
+              <l n="LanguageTexts" t="ArrayList" />
+            </o>
+            <o>
+              <v n="TextID">"338"</v>
+              <v n="TextDefault">"Counting generated pulses @output EL5131"</v>
+              <l n="LanguageTexts" t="ArrayList" />
+            </o>
+            <o>
+              <v n="TextID">"458"</v>
+              <v n="TextDefault">"EL5101"</v>
+              <l n="LanguageTexts" t="ArrayList" />
+            </o>
+            <o>
+              <v n="TextID">"838"</v>
+              <v n="TextDefault">"EL5131"</v>
+              <l n="LanguageTexts" t="ArrayList" />
+            </o>
+            <o>
+              <v n="TextID">"128"</v>
+              <v n="TextDefault">"Encoder "</v>
+              <l n="LanguageTexts" t="ArrayList" />
+            </o>
+            <o>
+              <v n="TextID">"452"</v>
+              <v n="TextDefault">"Encoder analysis and
+pulse train generator"</v>
+              <l n="LanguageTexts" t="ArrayList" />
+            </o>
+            <o>
+              <v n="TextID">"131"</v>
+              <v n="TextDefault">"Pulse train divider ratio"</v>
+              <l n="LanguageTexts" t="ArrayList" />
+            </o>
+            <o>
+              <v n="TextID">"819"</v>
+              <v n="TextDefault">"Pulse train divider ratio: %i"</v>
+              <l n="LanguageTexts" t="ArrayList" />
+            </o>
+            <o>
+              <v n="TextID">"390"</v>
+              <v n="TextDefault">"Re-configure EL5131"</v>
+              <l n="LanguageTexts" t="ArrayList" />
+            </o>
+            <o>
+              <v n="TextID">"423"</v>
+              <v n="TextDefault">"Reset counter EL5101"</v>
+              <l n="LanguageTexts" t="ArrayList" />
+            </o>
+            <o>
+              <v n="TextID">"967"</v>
+              <v n="TextDefault">"Single-shot pulses"</v>
+              <l n="LanguageTexts" t="ArrayList" />
+            </o>
+          </l>
+          <l n="Languages" t="ArrayList" />
+          <v n="GuidInit">{3c5fa37b-a2c0-400e-ab89-26a7cdcd2129}</v>
+          <v n="GuidReInit">{a3fab546-4448-4498-9cf7-d43258716a06}</v>
+          <v n="GuidExitX">{8e828a13-de4e-4890-a2b6-c822bcf0fe92}</v>
+        </o>
+      </Data>
+      <TypeList>
+        <Type n="ArrayList">System.Collections.ArrayList</Type>
+        <Type n="GlobalTextListObject">{63784cbb-9ba0-45e6-9d69-babf3f040511}</Type>
+        <Type n="Guid">System.Guid</Type>
+        <Type n="String">System.String</Type>
+        <Type n="TextListRow">{53da1be7-ad25-47c3-b0e8-e26286dad2e0}</Type>
+      </TypeList>
+    </XmlArchive>
+  </GlobalTextList>
+</TcPlcObject>

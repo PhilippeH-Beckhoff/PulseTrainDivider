@@ -1,0 +1,16 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.11">
+  <Task Name="FastEL5131Task" Id="{3ac3d60b-91e6-4822-83fe-50292f7186e1}">
+    <!--CycleTime in micro seconds.-->
+    <CycleTime>200</CycleTime>
+    <Priority>1</Priority>
+    <PouCall>
+      <Name>MAINEL5131</Name>
+    </PouCall>
+    <TaskFBGuid>{c796a78e-9f5a-41c5-ae9e-01a59ca5b5bd}</TaskFBGuid>
+    <Fb_init>{ea447f80-d794-433a-8e18-03a303171c1d}</Fb_init>
+    <Fb_exit>{38ef60b0-b477-497e-bbfe-4922847c8f44}</Fb_exit>
+    <CycleUpdate>{7620d026-8018-48ba-b78d-a0b3fc57b2d0}</CycleUpdate>
+    <PostCycleUpdate>{4264785a-faae-4eff-b74d-9833dc63af1c}</PostCycleUpdate>
+  </Task>
+</TcPlcObject>

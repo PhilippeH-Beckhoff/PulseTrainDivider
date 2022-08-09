@@ -1,0 +1,676 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.11">
+  <POU Name="FB_EL5131" Id="{937e21b3-33f8-4cfc-9be7-3050cdb27bc9}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_EL5131
+VAR_INPUT
+	bSingleShotPulses				:BOOL;		//bSingleShotPulses=TRUE=> output pulses are as wide as 1/2 of the input pulses period
+												//bSingleShotPulses=FALS=> output pulses are generated with a 50% duty cyle
+END_VAR
+VAR_OUTPUT
+	bConfigured						:BOOL;		//this output is set to TRUE when the terminal has been configured
+	END_VAR
+VAR
+	iEL5131CounterVal	AT%I*		:UDINT;
+	iStatusDO1			AT%I*		:BOOL;
+	iStatusDO2			at%i*		:bool;
+	
+	stepCfgEL5131					:USINT:=0;	//this variable controls the evolution of the configuration sequence
+	bError							:BOOL;		//info about error occurring while executing the config sequence of the EL5131
+	iErrStep						:USINT;		//info about error occurring while executing the config sequence of the EL5131
+	
+	amsNetIdEL5131		AT%I*		:AMSNETID;	//identifying the correct EL5131 terminal
+	sAmsNetIdEL5131					:STRING;
+	wPortEL5131			AT%I*		:WORD;		//identifying the correct EL5131 terminal
+	
+	//EtherCAT PDO information to be communicated with the terminal
+	iNbOfOutputEvents	AT%Q*		:USINT;	//number of outputs events (always 2)	
+	bEnbThreshOutputs	AT%Q*		:BOOL;		//for temporarily disabling the writing of the output based on counter thresholds, while reconfiguring the terminal 
+	bEnbThreshOutputs2	AT%Q*		:BOOL;		//for temporarily disabling the writing of the output based on counter thresholds, while reconfiguring the terminal 
+	bSetDigitalOut		AT%Q*		:BOOL;		//for temporarily  forcing the output to FALSE, while reconfiguring the terminal
+	bSetDigitalOut2		AT%Q*		:BOOL;		//for temporarily  forcing the output to FALSE, while reconfiguring the terminal
+	iThresholds_1		AT%Q*		:ARRAY[1..8] OF UDINT;		//value for the output_1 thresholds, 
+	iOutStates_1		AT%Q*		:ARRAY[1..8] OF BOOL;		//output_1 events
+	iThresholds_2		AT%Q*		:ARRAY[1..8] OF UDINT;		//value for the output_2 thresholds, 
+	iOutStates_2		AT%Q*		:ARRAY[1..8] OF BOOL;		//output_2 events
+	bForceResetCounter	AT%Q*		:BOOL;		//force reset the counter value to 0 when the EL5131 is reconfigured
+	iForceResetCntVal	AT%Q*		:UDINT;		//force reset the counter value to 0 when the EL5131 is reconfigured
+	
+	arrFIFO_Thr_1					:ARRAY[1..20] OF UDINT;
+	arrFIFO_Evt_1					:ARRAY[1..20] OF BOOL;
+	arrFIFO_Thr_2					:ARRAY[1..20] OF UDINT;
+	arrFIFO_Evt_2					:ARRAY[1..20] OF BOOL;
+
+	//CoE information for the EL5131
+	iProtectionReg					:UDINT:=16#72657375; //in order to be able to overwrite the limit counter value and reset counter value via CoE in the EL5131, the value 16#72657375 needs to be written in the object 16#F008 
+	iLimitCounterVal				:UDINT:=31;	//defining the max limit counter value at which the counter is automatically reset to the reset counter value
+	iResetCounterVal				:UDINT:=0;	//start value of the counter once it has been reset	
+	writeCoEConfig					:FB_EcCoESdoWrite;	
+	
+	//Evaluation mode (1-fold, 2-fold, 4-fold) is chosen via a Property of the FB; Divider ratio (4,5,7) is chosen via a Property of the FB
+	iSelectedEvalMode				:USINT;
+	iCoeEnumEvalMode				:USINT;
+	iDividerRatio					:UINT;
+
+	//Dual mode
+	iDividerRatio2					:UINT;	//only in dual output mode
+	iNbOfOutputEvents2	AT%Q*		:USINT;
+	
+	iCntLimDivider					:UDINT;
+	iCntLimDivider2					:UDINT;
+	iCntLimDividerMin				:udint;
+	
+	iDualCntLimit					:UDINT;
+
+	iHalfOutPeriodNrOfEvts			:UDINT;
+	iHalfOutPeriodNrOfEvts2			:UDINT;
+	
+	iNumberOfEventsCycle			:UDINT;
+	iNumberOfEventsCycle2			:UDINT;	
+	
+
+				
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[sAmsNetIdEL5131:=F_CreateAmsNetId(amsNetIdEL5131);
+
+writeCoEConfig(
+	sNetId:=sAmsNetIdEL5131 , 
+	nSlaveAddr:=wPortEL5131 , 
+	nSubIndex:= , 
+	nIndex:= , 
+	pSrcBuf:= , 
+	cbBufLen:= , 
+	bExecute:= , 
+	tTimeout:=T#3S , 
+	bBusy=> , 
+	bError=> , 
+	nErrId=> );]]></ST>
+    </Implementation>
+    <Method Name="M_Config_Divider_Dual" Id="{73ba1a0d-ae6a-4f48-a859-ba54d737ecf0}">
+      <Declaration><![CDATA[METHOD M_Config_Divider_Dual : BOOL
+VAR_INPUT
+END_VAR
+VAR
+	idx				:UDINT;
+	iArr			:UINT;
+	i,j				:uint;
+	iGcd			:UDINT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[//triggering the start of the sequence, when the Method is explicitly called
+IF stepCfgEL5131=0 THEN
+	bConfigured:=FALSE;
+	iErrStep:=0;
+	bError:=FALSE;
+	stepCfgEL5131:=1;
+END_IF
+
+
+//step sequence for the different configuration steps of the EL5131
+CASE stepCfgEL5131 OF
+	
+	//disabling the output threshold comparison/activation so the output can be forced to FALSE in the next step
+	1: 	bEnbThreshOutputs:=FALSE;
+		bEnbThreshOutputs2:=FALSE;
+		stepCfgEL5131:=2;
+		
+	//forcing the output to FALSE, so the output pulse train will start with a 0 level, after the EL5131 has been reconfigured
+	2:	bSetDigitalOut:=FALSE;
+		bSetDigitalOut2:=FALSE;
+		stepCfgEL5131:=3;
+		
+	//resetting the counter of the EL5131 to the value 0, so the terminal will start counting from the very first puls after it has been reconfigured
+	3:	iForceResetCntVal:=0;
+		bForceResetCounter:=TRUE;
+		stepCfgEL5131:=4;
+		
+	//re-activating the output activation on the basis of counter thresholds comparison	
+	4:	bForceResetCounter:=FALSE;
+		bEnbThreshOutputs:=TRUE;
+		bEnbThreshOutputs2:=TRUE;
+		stepCfgEL5131:=5;
+		
+	//calculating the least common multiple of both counter limits	
+	5: 	iCntLimDivider:=iSelectedEvalMode*iDividerRatio;
+		iCntLimDivider2:=iSelectedEvalMode*iDividerRatio2;
+		
+		iCntLimDividerMin:=MIN(iCntLimDivider,iCntLimDivider2);
+		
+		//first searching the greatest common divisor=the biggest number that commonly divides both counters, without remainder
+		FOR idx:=1 TO iCntLimDivider DO
+			IF (iCntLimDivider MOD idx=0) AND (iCntLimDivider2 MOD idx=0) THEN
+				iGcd:=idx;
+			END_IF
+		END_FOR		
+		
+		//now that we have the greatest common divisor, we can calculate the least common multiple
+		IF iGcd<>0 THEN	
+			iDualCntLimit:=iCntLimDivider*iCntLimDivider2/iGcd;
+			stepCfgEL5131:=10;
+		ELSE
+			iDualCntLimit:=0;
+			stepCfgEL5131:=0;
+			iErrStep:=5;
+			bError:=TRUE;
+		END_IF;
+			
+	//prepare values for pulse divider 
+	10:	iLimitCounterVal:=iDualCntLimit-1;	//the encoder value counts up to iLimitCounterVal then is automatically reset to iResetCounterVal internally in the terminal
+		iResetCounterVal:=0;	//the encoder counter value is always counting starting from 0			
+	
+		iHalfOutPeriodNrOfEvts:=(iSelectedEvalMode*iDividerRatio)/2;
+		iHalfOutPeriodNrOfEvts2:=(iSelectedEvalMode*iDividerRatio2)/2;		
+		
+		IF (iHalfOutPeriodNrOfEvts>0) THEN
+			iNumberOfEventsCycle:=(iDualCntLimit/iHalfOutPeriodNrOfEvts);
+		END_IF;
+	
+		IF (iHalfOutPeriodNrOfEvts2>0) THEN
+			iNumberOfEventsCycle2:=(iDualCntLimit/iHalfOutPeriodNrOfEvts2);
+		END_IF;
+			
+		FOR idx:=1 TO 20 DO
+			arrFIFO_Thr_1[idx]:=0;
+			arrFIFO_Evt_1[idx]:=0;
+			arrFIFO_Thr_2[idx]:=0;
+			arrFIFO_Evt_2[idx]:=0;
+		END_FOR
+		
+		FOR idx:=1 TO iNumberOfEventsCycle DO
+			arrFIFO_Thr_1[idx]:=iHalfOutPeriodNrOfEvts*(idx-1); 
+			arrFIFO_Evt_1[idx]:=(idx MOD 2=0);	
+		END_FOR
+	
+		FOR idx:=1 TO iNumberOfEventsCycle2 DO
+			arrFIFO_Thr_2[idx]:=iHalfOutPeriodNrOfEvts2*(idx-1); 
+			arrFIFO_Evt_2[idx]:=(idx MOD 2=0);	
+		END_FOR
+		
+		iNbOfOutputEvents:=LIMIT(0,TO_USINT(iNumberOfEventsCycle),8);	
+		iNbOfOutputEvents2:=Limit(0,TO_USINT(iNumberOfEventsCycle2),8);	
+	
+		stepCfgEL5131:=20;
+
+	//write ascii USER into register 0xF008 to lift protection on counter reset/limit values in the terminal
+	//this has to be done if the CoE objects 16#8001:1A (limit counter value) and 16#8001:1B (reset counter value);	
+	20:	iProtectionReg:=16#72657375;
+		writeCoEConfig.nIndex:=16#F008;
+		writeCoEConfig.nSubIndex:=16#00;
+		writeCoEConfig.pSrcBuf:=ADR(iProtectionReg);
+		writeCoEConfig.cbBufLen:=SIZEOF(iProtectionReg);
+		
+		writeCoEConfig.bExecute:=TRUE;
+		
+		IF writeCoEConfig.bBusy THEN
+			writeCoEConfig.bExecute:=FALSE;
+			stepCfgEL5131:=30;
+		END_IF;
+		
+	//wait for the end of writing the limit counter value	
+	30: IF NOT writeCoEConfig.bBusy AND NOT writeCoEConfig.bError THEN
+			stepCfgEL5131:=40;			
+		END_IF
+		
+		IF writeCoEConfig.bError THEN
+			bError:=TRUE;
+			iErrStep:=stepCfgEL5131;
+			stepCfgEL5131:=0;
+		END_IF
+
+
+	//write limit counter value	= max value of the counter from which the EL5131 terminal restarts counting from the reset counter value	
+	40:	writeCoEConfig.nIndex:=16#8001;
+		writeCoEConfig.nSubIndex:=16#1A;
+		writeCoEConfig.pSrcBuf:=ADR(iLimitCounterVal);
+		writeCoEConfig.cbBufLen:=SIZEOF(iLimitCounterVal);
+		
+		writeCoEConfig.bExecute:=TRUE;
+		
+		IF writeCoEConfig.bBusy THEN
+			writeCoEConfig.bExecute:=FALSE;
+			stepCfgEL5131:=50;
+		END_IF;
+		
+	//wait for the end of writing the limit counter value	
+	50: IF NOT writeCoEConfig.bBusy AND NOT writeCoEConfig.bError THEN
+			stepCfgEL5131:=60;			
+		END_IF
+		
+		IF writeCoEConfig.bError THEN
+			bError:=TRUE;
+			iErrStep:=stepCfgEL5131;
+			stepCfgEL5131:=0;
+		END_IF
+
+	//write reset counter value	= starting value for the counter whe it is reset (normally 0)	
+	60:	writeCoEConfig.nIndex:=16#8001;
+		writeCoEConfig.nSubIndex:=16#1B;
+		writeCoEConfig.pSrcBuf:=ADR(iResetCounterVal);
+		writeCoEConfig.cbBufLen:=SIZEOF(iResetCounterVal);
+		
+		writeCoEConfig.bExecute:=TRUE;
+		
+		IF writeCoEConfig.bBusy THEN
+			writeCoEConfig.bExecute:=FALSE;
+			stepCfgEL5131:=70;
+		END_IF;
+		
+	//wait for the end of writing the reset counter value	
+	70: IF NOT writeCoEConfig.bBusy AND NOT writeCoEConfig.bError THEN
+			stepCfgEL5131:=80;			
+		END_IF
+		
+		IF writeCoEConfig.bError THEN
+			bError:=TRUE;
+			iErrStep:=stepCfgEL5131;
+			stepCfgEL5131:=0;
+		END_IF
+		
+	//write the evaluation mode: 1-fold, (value 1)  2-fold (value 2) or 4-fold (value 0)	
+	//1-fold = only the rising edges of the encoder A-track are counted	
+	//2-fold = both the rising and falling edges of the encoder A-track are counted	
+	//4-fold = both the rising and falling edges of the encoder A and B tracks are counted	
+	80:	writeCoEConfig.nIndex:=16#8000;
+		writeCoEConfig.nSubIndex:=16#06;
+		writeCoEConfig.pSrcBuf:=ADR(iCoeEnumEvalMode);
+		writeCoEConfig.cbBufLen:=SIZEOF(iCoeEnumEvalMode);
+		
+		writeCoEConfig.bExecute:=TRUE;
+		
+		IF writeCoEConfig.bBusy THEN
+			writeCoEConfig.bExecute:=FALSE;
+			stepCfgEL5131:=90;
+		END_IF;
+		
+	//wait for the end of writing the evaluation mode	
+	90: IF NOT writeCoEConfig.bBusy AND NOT writeCoEConfig.bError THEN
+			stepCfgEL5131:=100;			
+		END_IF
+		
+		IF writeCoEConfig.bError THEN
+			bError:=TRUE;
+			iErrStep:=stepCfgEL5131;
+			stepCfgEL5131:=0;
+		END_IF		
+	
+	//write 0 into register 0xF008 to set protection on counter reset/limit values, after they have been changed earlier in the sequence	
+	100:iProtectionReg:=16#00000000;
+		writeCoEConfig.nIndex:=16#F008;
+		writeCoEConfig.nSubIndex:=16#00;
+		writeCoEConfig.pSrcBuf:=ADR(iProtectionReg);
+		writeCoEConfig.cbBufLen:=SIZEOF(iProtectionReg);
+		
+		writeCoEConfig.bExecute:=TRUE;
+		
+		IF writeCoEConfig.bBusy THEN
+			writeCoEConfig.bExecute:=FALSE;
+			stepCfgEL5131:=110;
+		END_IF;
+		
+	//wait for the end of writing 	
+	110: IF NOT writeCoEConfig.bBusy AND NOT writeCoEConfig.bError THEN
+			bConfigured:=TRUE;	//setting the 'bConfigured' bit so it is confirmed that the sequence has been completely executed
+			stepCfgEL5131:=0;			
+		END_IF
+		
+		IF writeCoEConfig.bError THEN
+			bError:=TRUE;
+			iErrStep:=stepCfgEL5131;
+			stepCfgEL5131:=0;
+		END_IF
+	
+		
+END_CASE]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="M_Config_Divider_Single" Id="{6eca21cc-dc97-4e75-a86a-07e0bc8f2595}">
+      <Declaration><![CDATA[METHOD M_Config_Divider_Single : BOOL
+VAR_INPUT
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[//triggering the start of the sequence, when the Method is explicitly called
+IF stepCfgEL5131=0 THEN
+	bConfigured:=FALSE;
+	iErrStep:=0;
+	bError:=FALSE;
+	stepCfgEL5131:=1;
+END_IF
+
+
+//step sequence for the different configuration steps of the EL5131
+CASE stepCfgEL5131 OF
+	
+	//disabling the output threshold comparison/activation so the output can be forced to FALSE in the next step
+	1: 	bEnbThreshOutputs:=FALSE;
+		bEnbThreshOutputs2:=FALSE;
+		stepCfgEL5131:=2;
+		
+	//forcing the output to FALSE, so the output pulse train will start with a 0 level, after the EL5131 has been reconfigured
+	2:	bSetDigitalOut:=FALSE;
+		bSetDigitalOut2:=FALSE;
+		stepCfgEL5131:=3;
+		
+	//resetting the counter of the EL5131 to the value 0, so the terminal will start counting from the very first puls after it has been reconfigured
+	3:	iForceResetCntVal:=0;
+		bForceResetCounter:=TRUE;
+		stepCfgEL5131:=4;
+		
+	//re-activating the output activation on the basis of counter thresholds comparison	
+	4:	bForceResetCounter:=FALSE;
+		bEnbThreshOutputs:=TRUE;
+		stepCfgEL5131:=10;
+
+	
+	//prepare values for pulse divider 
+	10:	iNbOfOutputEvents:=2;	
+		iNbOfOutputEvents2:=0;
+		iResetCounterVal:=0;	//the encoder counter value is always counting starting from 0
+
+		IF bSingleShotPulses THEN	//here is chosen if the output pulse train will be a 50% duty cycle wave of single-shot pulses		
+			iLimitCounterVal:=iSelectedEvalMode*iDividerRatio-1;	//the encoder value counts up to iLimitCounterVal then is automatically reset to iResetCounterVal internally in the terminal
+			
+			iThresholds_1[1]:=iSelectedEvalMode*iDividerRatio-1;	
+			iOutStates_1[1]:=TRUE;
+			
+			iThresholds_1[2]:=0;
+			iOutStates_1[2]:=FALSE;			
+		ELSE
+			iLimitCounterVal:=iSelectedEvalMode*iDividerRatio-1;	//the encoder value counts up to iLimitCounterVal then is automatically reset to iResetCounterVal internally in the terminal
+			
+			iThresholds_1[1]:=iSelectedEvalMode*iDividerRatio/2;	//old (iSelectedEvalMode*iDividerRatio/2)-1
+			iOutStates_1[1]:=TRUE;
+			
+			iThresholds_1[2]:=0;									// old iSelectedEvalMode*iDividerRatio-1;
+			iOutStates_1[2]:=FALSE;		
+		END_IF;	
+	
+			stepCfgEL5131:=20;
+
+	//write ascii USER into register 0xF008 to lift protection on counter reset/limit values in the terminal
+	//this has to be done if the CoE objects 16#8001:1A (limit counter value) and 16#8001:1B (reset counter value);	
+	20:	iProtectionReg:=16#72657375;
+		writeCoEConfig.nIndex:=16#F008;
+		writeCoEConfig.nSubIndex:=16#00;
+		writeCoEConfig.pSrcBuf:=ADR(iProtectionReg);
+		writeCoEConfig.cbBufLen:=SIZEOF(iProtectionReg);
+		
+		writeCoEConfig.bExecute:=TRUE;
+		
+		IF writeCoEConfig.bBusy THEN
+			writeCoEConfig.bExecute:=FALSE;
+			stepCfgEL5131:=30;
+		END_IF;
+		
+	//wait for the end of writing the limit counter value	
+	30: IF NOT writeCoEConfig.bBusy AND NOT writeCoEConfig.bError THEN
+			stepCfgEL5131:=40;			
+		END_IF
+		
+		IF writeCoEConfig.bError THEN
+			bError:=TRUE;
+			iErrStep:=stepCfgEL5131;
+			stepCfgEL5131:=0;
+		END_IF
+
+
+	//write limit counter value	= max value of the counter from which the EL5131 terminal restarts counting from the reset counter value	
+	40:	writeCoEConfig.nIndex:=16#8001;
+		writeCoEConfig.nSubIndex:=16#1A;
+		writeCoEConfig.pSrcBuf:=ADR(iLimitCounterVal);
+		writeCoEConfig.cbBufLen:=SIZEOF(iLimitCounterVal);
+		
+		writeCoEConfig.bExecute:=TRUE;
+		
+		IF writeCoEConfig.bBusy THEN
+			writeCoEConfig.bExecute:=FALSE;
+			stepCfgEL5131:=50;
+		END_IF;
+		
+	//wait for the end of writing the limit counter value	
+	50: IF NOT writeCoEConfig.bBusy AND NOT writeCoEConfig.bError THEN
+			stepCfgEL5131:=60;			
+		END_IF
+		
+		IF writeCoEConfig.bError THEN
+			bError:=TRUE;
+			iErrStep:=stepCfgEL5131;
+			stepCfgEL5131:=0;
+		END_IF
+
+	//write reset counter value	= starting value for the counter whe it is reset (normally 0)	
+	60:	writeCoEConfig.nIndex:=16#8001;
+		writeCoEConfig.nSubIndex:=16#1B;
+		writeCoEConfig.pSrcBuf:=ADR(iResetCounterVal);
+		writeCoEConfig.cbBufLen:=SIZEOF(iResetCounterVal);
+		
+		writeCoEConfig.bExecute:=TRUE;
+		
+		IF writeCoEConfig.bBusy THEN
+			writeCoEConfig.bExecute:=FALSE;
+			stepCfgEL5131:=70;
+		END_IF;
+		
+	//wait for the end of writing the reset counter value	
+	70: IF NOT writeCoEConfig.bBusy AND NOT writeCoEConfig.bError THEN
+			stepCfgEL5131:=80;			
+		END_IF
+		
+		IF writeCoEConfig.bError THEN
+			bError:=TRUE;
+			iErrStep:=stepCfgEL5131;
+			stepCfgEL5131:=0;
+		END_IF
+		
+	//write the evaluation mode: 1-fold, (value 1)  2-fold (value 2) or 4-fold (value 0)	
+	//1-fold = only the rising edges of the encoder A-track are counted	
+	//2-fold = both the rising and falling edges of the encoder A-track are counted	
+	//4-fold = both the rising and falling edges of the encoder A and B tracks are counted	
+	80:	writeCoEConfig.nIndex:=16#8000;
+		writeCoEConfig.nSubIndex:=16#06;
+		writeCoEConfig.pSrcBuf:=ADR(iCoeEnumEvalMode);
+		writeCoEConfig.cbBufLen:=SIZEOF(iCoeEnumEvalMode);
+		
+		writeCoEConfig.bExecute:=TRUE;
+		
+		IF writeCoEConfig.bBusy THEN
+			writeCoEConfig.bExecute:=FALSE;
+			stepCfgEL5131:=90;
+		END_IF;
+		
+	//wait for the end of writing the evaluation mode	
+	90: IF NOT writeCoEConfig.bBusy AND NOT writeCoEConfig.bError THEN
+			stepCfgEL5131:=100;			
+		END_IF
+		
+		IF writeCoEConfig.bError THEN
+			bError:=TRUE;
+			iErrStep:=stepCfgEL5131;
+			stepCfgEL5131:=0;
+		END_IF		
+	
+	//write 0 into register 0xF008 to set protection on counter reset/limit values, after they have been changed earlier in the sequence	
+	100:iProtectionReg:=16#00000000;
+		writeCoEConfig.nIndex:=16#F008;
+		writeCoEConfig.nSubIndex:=16#00;
+		writeCoEConfig.pSrcBuf:=ADR(iProtectionReg);
+		writeCoEConfig.cbBufLen:=SIZEOF(iProtectionReg);
+		
+		writeCoEConfig.bExecute:=TRUE;
+		
+		IF writeCoEConfig.bBusy THEN
+			writeCoEConfig.bExecute:=FALSE;
+			stepCfgEL5131:=110;
+		END_IF;
+		
+	//wait for the end of writing 	
+	110: IF NOT writeCoEConfig.bBusy AND NOT writeCoEConfig.bError THEN
+			bConfigured:=TRUE;	//setting the 'bConfigured' bit so it is confirmed that the sequence has been completely executed
+			stepCfgEL5131:=0;			
+		END_IF
+		
+		IF writeCoEConfig.bError THEN
+			bError:=TRUE;
+			iErrStep:=stepCfgEL5131;
+			stepCfgEL5131:=0;
+		END_IF
+	
+		
+END_CASE]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="M_FifoFeed_EL5131" Id="{9924d696-a3cb-4e45-9541-ac4a3a5b9a2b}">
+      <Declaration><![CDATA[METHOD M_FifoFeed_EL5131 : BOOL
+VAR_INPUT
+END_VAR
+VAR
+	idx			:UDINT;
+	idxFIFO		:udint;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[//FIRST PULSE TRAIN/////////////////////////////////////////////////////////////////////////
+//checking if we have more than 8 events/cycle; if not=>fixed counters; if yes=>FIFO feed 
+IF iNumberOfEventsCycle<=8 THEN
+	FOR idx:=1 TO iNumberOfEventsCycle DO
+		iThresholds_1[idx]:=arrFIFO_Thr_1[idx];
+		iOutStates_1[idx]:=arrFIFO_Evt_1[idx];
+	END_FOR
+ELSE	
+	//search the next FIFO value the closest to the actual counter value
+	idxFifo:=1;
+	FOR idx:=1 TO iNumberOfEventsCycle DO
+		IF iThresholds_1[idx]>=iEL5131CounterVal THEN
+			idxFIFO:=idx;
+			EXIT;
+		END_IF;
+	END_FOR;	
+	FOR idx:=1 TO 8 DO
+		IF (idxFIFO+idx-1)<=iNumberOfEventsCycle THEN
+			iThresholds_1[idx]:=arrFIFO_Thr_1[idxFIFO+idx-1];
+			iOutStates_1[idx]:=arrFIFO_Evt_1[idxFIFO+idx-1];	
+		ELSE
+			iThresholds_1[idx]:=arrFIFO_Thr_1[idxFIFO+idx-1-iNumberOfEventsCycle];
+			iOutStates_1[idx]:=arrFIFO_Evt_1[idxFIFO+idx-1-iNumberOfEventsCycle];				
+		END_IF;	
+	END_FOR
+
+END_IF		
+//////////////////////////////////////////////////////////////////////////////////////////////
+
+
+
+
+
+//FIRST PULSE TRAIN/////////////////////////////////////////////////////////////////////////
+//checking if we have more than 8 events/cycle; if not=>fixed counters; if yes=>FIFO feed 
+IF iNumberOfEventsCycle2<=8 THEN
+	FOR idx:=1 TO iNumberOfEventsCycle2 DO
+		iThresholds_2[idx]:=arrFIFO_Thr_2[idx];
+		iOutStates_2[idx]:=arrFIFO_Evt_2[idx];
+	END_FOR
+ELSE	
+	//search the next FIFO value the closest to the actual counter value
+	idxFifo:=1;
+	FOR idx:=1 TO iNumberOfEventsCycle2 DO
+		IF iThresholds_2[idx]>=iEL5131CounterVal THEN
+			idxFIFO:=idx;
+			EXIT;
+		END_IF;
+	END_FOR;	
+	FOR idx:=1 TO 8 DO
+		IF (idxFIFO+idx-1)<=iNumberOfEventsCycle2 THEN
+			iThresholds_2[idx]:=arrFIFO_Thr_2[idxFIFO+idx-1];
+			iOutStates_2[idx]:=arrFIFO_Evt_2[idxFIFO+idx-1];	
+		ELSE
+			iThresholds_2[idx]:=arrFIFO_Thr_2[idxFIFO+idx-1-iNumberOfEventsCycle2];
+			iOutStates_2[idx]:=arrFIFO_Evt_2[idxFIFO+idx-1-iNumberOfEventsCycle2];				
+		END_IF;	
+	END_FOR
+
+END_IF		
+//////////////////////////////////////////////////////////////////////////////////////////////
+	
+
+		
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="M_Reinit_Divider" Id="{bc5ab211-57b1-472d-8bfd-cc5b44515d35}">
+      <Declaration><![CDATA[METHOD M_Reinit_Divider : BOOL
+VAR_INPUT
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[bConfigured:=FALSE;
+]]></ST>
+      </Implementation>
+    </Method>
+    <Property Name="P_DividerRatio" Id="{85e13e5c-9779-408e-a67f-47337191660b}">
+      <Declaration><![CDATA[PROPERTY P_DividerRatio : UINT
+
+]]></Declaration>
+      <Set Name="Set" Id="{50643f50-41e5-4c9f-9f4b-240b6ed04051}">
+        <Declaration><![CDATA[VAR
+END_VAR
+]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[iDividerRatio:=limit(2,P_DividerRatio,20);]]></ST>
+        </Implementation>
+      </Set>
+    </Property>
+    <Property Name="P_DividerRatio2" Id="{c3bcc405-878d-45ea-8a0a-4f29bafc57c2}">
+      <Declaration><![CDATA[PROPERTY P_DividerRatio2 : UINT
+
+]]></Declaration>
+      <Set Name="Set" Id="{9bfee9dd-3a18-4a2d-b40e-5cb9c8c8deb5}">
+        <Declaration><![CDATA[VAR
+END_VAR
+]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[iDividerRatio2:=limit(2,P_DividerRatio2,20);]]></ST>
+        </Implementation>
+      </Set>
+    </Property>
+    <Property Name="P_EvalMode" Id="{2a1c8b78-8262-460b-a5c6-c0b9a89c6b73}">
+      <Declaration><![CDATA[PROPERTY P_EvalMode : USINT]]></Declaration>
+      <Set Name="Set" Id="{1971d69f-768a-4fe6-9f29-4acc9fe25fb7}">
+        <Declaration><![CDATA[VAR
+END_VAR
+]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[IF ((P_EvalMode<>1) AND (P_EvalMode<>2) AND (P_EvalMode<>4)) THEN
+	iSelectedEvalMode:=4;  //iEvaluationMode=4 =>Quadrature decoding
+ELSE
+	iSelectedEvalMode:=P_EvalMode;
+END_IF
+		
+CASE iSelectedEvalMode OF
+	1: iCoeEnumEvalMode:=1; (*1-fold*)
+	2: iCoeEnumEvalMode:=2; (*2-fold*)
+	4: iCoeEnumEvalMode:=0; (*4-fold*)		
+END_CASE]]></ST>
+        </Implementation>
+      </Set>
+    </Property>
+  </POU>
+</TcPlcObject>

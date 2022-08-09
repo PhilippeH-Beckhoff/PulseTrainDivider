@@ -1,0 +1,25 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.11">
+  <POU Name="MAIN" Id="{c46370cb-00d4-4024-9723-0e4e960bd11c}" SpecialFunc="None">
+    <Declaration><![CDATA[PROGRAM MAIN
+VAR
+	iCounterValueDoubleCheckEL5101		AT%I*			:UDINT;
+	bResetCounterEL5101					AT%Q*			:BOOL;
+	iSetCounterValueEL5101ForReset		AT%Q*			:UDINT;
+	
+	bResetEL5101										:bool;
+END_VAR
+
+
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[bResetCounterEL5101:=FALSE;
+
+IF bResetEL5101 THEN
+	bResetCounterEL5101:=TRUE;
+	iSetCounterValueEL5101ForReset:=0;
+	bResetEL5101:=FALSE;
+END_IF]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>
